@@ -7,6 +7,7 @@ realcode/.env
 terraform/.terraform/
 terraform/terraform.tfstate*
 terraform/*.tfvars
+terraform.tfstate
 
 # Logs
 *.log
