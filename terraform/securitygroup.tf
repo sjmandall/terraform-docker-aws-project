@@ -4,6 +4,7 @@ resource "aws_security_group" "mysg" {
     Name = "mysg"
   }
 
+  #HTTP
   ingress {
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
@@ -11,6 +12,7 @@ resource "aws_security_group" "mysg" {
     to_port     = 80
   }
 
+  #HTTPS
   ingress {
     from_port   = 443
     to_port     = 443
@@ -18,13 +20,8 @@ resource "aws_security_group" "mysg" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
-  ingress {
-    from_port   = 3000
-    to_port     = 3000
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
 
+  # SSH
   ingress {
     from_port   = 22
     to_port     = 22
@@ -32,6 +29,42 @@ resource "aws_security_group" "mysg" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
+  # Kubernetes API
+  ingress {
+    from_port = 6443
+    to_port = 6443
+    protocol = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  # Kubernetes NodePort range
+
+  ingress {
+    from_port = 30000
+    to_port = 32767
+    protocol = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  # Prometheus
+
+  ingress {
+    from_port = 9090
+    to_port = 9090
+    protocol = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+  
+  #Grafana
+
+  ingress {
+  from_port   = 32000
+  to_port     = 32000
+  protocol    = "tcp"
+  cidr_blocks = ["0.0.0.0/0"]
+}
+
+# Allow All Outbound
   egress {
     from_port   = 0
     to_port     = 0
