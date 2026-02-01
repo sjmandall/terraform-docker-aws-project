@@ -3,10 +3,10 @@ kind: Service
 metadata:
   name: app-service
 spec:
-  type: NodePort
+  type: ClusterIP
   selector:
     app: aicode
   ports:
     - port: 80
       targetPort: 3000
-      nodePort: 30080
+      
