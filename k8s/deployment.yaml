@@ -1,0 +1,19 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: aicode
+  template:
+    metadata:
+      labels:
+        app: aicode
+    spec:
+      containers:
+      - name: aicode
+        image: sjmandal/realcode:02
+        ports:
+        - containerPort: 3000
