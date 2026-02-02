@@ -57,38 +57,3 @@ resource "aws_route_table_association" "public_subnet" {
 
 
 
-resource "aws_instance" "aicode01" {
-  ami                         = data.aws_ami.ubuntu.id
-  instance_type               = "t3.micro"
-  key_name                    = "realcode-key"
-  subnet_id                   = aws_subnet.public_subnet.id
-  vpc_security_group_ids      = [aws_security_group.mysg.id]
-  associate_public_ip_address = true
-  user_data = <<EOF
-#!/bin/bash
-set -e
-
-exec > /var/log/user-data.log 2>&1
-
-apt update -y
-apt install docker.io git -y
-
-systemctl start docker
-systemctl enable docker
-
-docker pull sjmandal/realcode:02
-
-docker rm -f realcode || true
-
-docker run -d -p 80:3000 -e NODE_ENV=production -e MONGO_URL="mongodb+srv://sjmandal2415_db_user:sjmandal2415_db_user@cluster0.iq6pvqp.mongodb.net/?appName=Cluster0" --name realcode sjmandal/realcode:02
-
-
-EOF
-
-
- 
-
-  tags = {
-    Name = "aicode01"
-  }
-}

@@ -5,6 +5,9 @@ resource "aws_instance" "k8s_worker_aicode03" {
   subnet_id                   = aws_subnet.public_subnet.id
   vpc_security_group_ids      = [aws_security_group.mysg.id]
   associate_public_ip_address = true
+  user_data = file("scripts/worker.sh")
+
+  
   
 
 
@@ -12,6 +15,8 @@ resource "aws_instance" "k8s_worker_aicode03" {
   volume_size = 20
   volume_type = "gp3"
  }
+
+ 
 
 
 
@@ -21,3 +26,4 @@ resource "aws_instance" "k8s_worker_aicode03" {
     Name = "k8s_worker_aicode03"
   }
 }
+
