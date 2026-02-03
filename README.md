@@ -1,424 +1,212 @@
-# realcodecollaborator
-# Fully Automated Cloud Deployment with Terraform and Docker
+End-to-End Kubernetes on AWS: Automated Deployment, Observability, and CI/CD
 
-## Project Overview
+This repository documents a production-style, self-managed Kubernetes implementation on AWS EC2. The project demonstrates how a real application can be built, containerized, deployed, observed, and continuously delivered without using managed services like EKS, relying instead on core cloud and Kubernetes primitives.
 
-This repository demonstrates a production-grade DevOps workflow for deploying a globally accessible application using AWS EC2, Terraform, Docker, Linux automation, and MongoDB Atlas.
-
-The primary objective is to achieve a zero-manual, reproducible deployment pipeline in which infrastructure provisioning and application startup occur automatically after every `terraform apply`.
+The work reflects real-world DevOps engineering: dealing with infrastructure constraints, debugging networking and runtime failures, stabilizing a cluster, and building reliable automation rather than following a scripted tutorial.
 
 ---
 
-## Key DevOps Objectives
+Project Overview
 
-* Automate infrastructure provisioning using Infrastructure as Code (Terraform)
-* Containerize application services using Docker for portability and consistency
-* Enable automatic service startup on EC2 using user data scripts
-* Implement stateless compute with persistent cloud-based storage
-* Ensure public and global accessibility of the deployed application
-* Support a destroy → apply → redeploy workflow with no manual intervention
+This system delivers:
 
----
+- Infrastructure as Code using Terraform
+- A two-node kubeadm-based Kubernetes cluster
+- containerd as the container runtime with systemd cgroups enabled
+- Calico CNI for pod networking
+- A containerized web application deployed via:
+   - Kubernetes Deployment
+   - NodePort Service
+   - Optional NGINX Ingress
+- Cluster observability using Prometheus + Grafana (Helm-based)
+- Automated build-and-deploy pipeline using GitHub Actions + Docker Hub
 
-## DevOps Tools and Technologies
-
-| Category               | Tools               |
-| ---------------------- | ------------------- |
-| Cloud Provider         | AWS EC2             |
-| Infrastructure as Code | Terraform           |
-| Containerization       | Docker              |
-| Automation             | EC2 User Data       |
-| Operating System       | Linux (Ubuntu)      |
-| Database               | MongoDB Atlas       |
-| Networking             | AWS Security Groups |
-| Version Control        | Git and GitHub      |
+The result is a working cloud-native application stack that resembles what you would see in many startup and mid-size production environments.
 
 ---
 
-## High-Level Architecture
+Repository Structure
 
-```
-GitHub Repository
-      ↓
-Terraform Provisioning (IaC)
-      ↓
-AWS EC2 Instance Creation
-      ↓
-Docker Installation
-      ↓
-Docker Image Pull
-      ↓
-Container Auto-Run
-      ↓
-Application Available Globally
-```
-
----
-
-## Repository Structure
-
-```
-project-root/
+.
+├── realcode/
+│   ├── Dockerfile          # Application build definition
+│   └── (Website source code)
 │
-├── terraform/        # Infrastructure as Code files
+├── terraform/
 │   ├── main.tf
-│   ├── variables.tf
-│   ├── outputs.tf
-│   └── security.tf
+│   ├── vpc.tf
+│   ├── securitygroup.tf
+│   ├── k8s-master.tf
+│   ├── k8s-worker.tf
+│   └── scripts/
+│       ├── master.sh       # Bootstraps Kubernetes control plane
+│       └── worker.sh       # Joins worker node to cluster
 │
-├── docker/           # Docker build configuration
-│   └── Dockerfile
+├── k8s/
+│   ├── deployment.yaml     # Application workload
+│   ├── service.yaml        # NodePort exposure
+│   └── ingress.yaml        # Optional ingress routing
 │
-├── app/              # Full application source code
-│
-├── .env.example      # Environment variable template
-├── .gitignore        # Git ignore rules
-└── README.md         # Project documentation
-```
+└── .github/
+    └── workflows/
+        └── k8s-ci-cd.yaml  # Automated CI/CD pipeline
+
+The Dockerfile resides inside "realcode/" because this directory contains the actual application source — a structure consistent with real production repositories.
 
 ---
 
-## Automated Deployment Workflow
+Infrastructure Provisioning
 
-### Step 1 — Build Docker Image
+From the "terraform/" directory:
 
-```bash
-docker build -t realcode:latest .
-```
-
-### Step 2 — Push Image to Docker Hub
-
-```bash
-docker tag realcode:latest sjmandal/realcode:latest
-docker push sjmandal/realcode:latest
-```
-
-### Step 3 — Provision Infrastructure Using Terraform
-
-```bash
-cd terraform
 terraform init
-terraform apply
-```
+terraform apply -auto-approve
 
-### Step 4 — Access the Application
+This provisions:
 
-```
-http://EC2_PUBLIC_IP:3000
-```
+- Custom VPC and public subnet
+- Internet Gateway
+- Security Group configured for Kubernetes and NodePort access
+- One control-plane (master) EC2 instance
+- One worker EC2 instance
 
----
+Each instance is bootstrapped with:
 
-## EC2 User Data Automation Script
-
-The following script ensures Docker installation, image pulling, and automatic container startup on every EC2 launch:
-
-```bash
-#!/bin/bash
-set -e
-
-apt update -y
-apt install docker.io -y
-systemctl start docker
-systemctl enable docker
-
-docker pull sjmandal/realcode:latest
-
-docker rm -f realcode || true
-
-docker run -d \
-  --restart unless-stopped \
-  -p 3000:3000 \
-  --name realcode \
-  sjmandal/realcode:latest
-```
+- Kernel modules required for Kubernetes
+- containerd configured for systemd cgroups
+- kubeadm, kubelet, and kubectl
+- Pre-requisites for stable cluster networking
 
 ---
 
-## Major Challenges Encountered and Solutions
+Kubernetes Cluster Setup
 
-### Issue: Application Not Accessible Publicly
+After Terraform completes, SSH into the master node:
 
-**Cause:** Server bound to localhost only
+ssh -i realcode-key.pem ubuntu@<MASTER_PUBLIC_IP>
 
-**Resolution:**
+Verify cluster health:
 
-```
-hostname = "0.0.0.0"
-```
+kubectl get nodes
 
----
-
-### Issue: Real-Time Synchronization Failed Across Devices
-
-**Cause:** Client socket was configured to connect to localhost
-
-**Resolution:**
-
-```
-io(window.location.origin)
-```
+A healthy cluster shows both nodes in Ready state before proceeding.
 
 ---
 
-### Issue: MongoDB Atlas Connection Failures
+Application Deployment
 
-| Root Cause                        | Resolution                  |
-| --------------------------------- | --------------------------- |
-| Environment variables not loading | Proper dotenv configuration |
-| Authentication failures           | Credential reset            |
-| IP restrictions                   | Whitelisted 0.0.0.0/0       |
+On the master node:
 
----
+git clone <your-repo>
+cd terraform-docker-aws-project
+kubectl apply -f k8s/
 
-### Issue: Docker Image Not Updating After Code Changes
+Confirm service exposure:
 
-**Resolution:** Rebuilt and repushed Docker images before deployment
+kubectl get svc
 
----
+The application is reachable via:
 
-### Issue: Terraform Rebuild Reset Server Configuration
+http://<WORKER_PUBLIC_IP>:<NODEPORT>
 
-**Resolution:** Implemented Docker auto-start via EC2 user data
+This validates that Kubernetes scheduling, pod networking, and external access are functioning correctly.
 
 ---
 
-## Demonstrated DevOps Capabilities
+Monitoring with Prometheus and Grafana (Helm)
 
-* Infrastructure as Code and automated provisioning
-* Fully reproducible deployments with zero manual configuration
-* Container lifecycle management using Docker
-* Secure cloud networking and firewall configuration
-* Stateless compute with persistent managed database
-* Production-ready automation workflows
+Install observability stack:
 
----
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+helm repo update
 
-## Resume-Ready Project Summary
+helm install prometheus prometheus-community/kube-prometheus-stack \
+  -n monitoring --create-namespace
 
-Designed and deployed a fully automated cloud infrastructure using Terraform and Docker on AWS EC2. Implemented containerized application deployment with automatic startup, persistent cloud database integration, and globally accessible services using Infrastructure as Code principles.
+Verify all monitoring components are running:
 
----
+kubectl get pods -n monitoring
 
-## Potential Future Enhancements
+Retrieve Grafana access details:
 
-* CI/CD pipeline implementation using GitHub Actions
-* HTTPS enablement with custom domain integration
-* Load balancing and auto-scaling using AWS services
-* Monitoring and observability with Prometheus and Grafana
+kubectl get svc -n monitoring
+kubectl get secret -n monitoring prometheus-grafana -o jsonpath="{.data.admin-password}" | base64 --decode
 
----
+Grafana is then accessible via:
 
-## Author
+http://<WORKER_PUBLIC_IP>:<GRAFANA_NODEPORT>
 
-SJ Mandal
+Prometheus can be accessed securely via port-forwarding when needed:
 
-# Fully Automated Cloud Deployment with Terraform and Docker
-
-## Project Overview
-
-This repository demonstrates a production-grade DevOps workflow for deploying a globally accessible application using AWS EC2, Terraform, Docker, Linux automation, and MongoDB Atlas.
-
-The primary objective is to achieve a zero-manual, reproducible deployment pipeline in which infrastructure provisioning and application startup occur automatically after every `terraform apply`.
+kubectl port-forward -n monitoring svc/prometheus-kube-prometheus-prometheus 9090:9090
 
 ---
 
-## Key DevOps Objectives
+CI/CD Pipeline
 
-* Automate infrastructure provisioning using Infrastructure as Code (Terraform)
-* Containerize application services using Docker for portability and consistency
-* Enable automatic service startup on EC2 using user data scripts
-* Implement stateless compute with persistent cloud-based storage
-* Ensure public and global accessibility of the deployed application
-* Support a destroy → apply → redeploy workflow with no manual intervention
+A GitHub Actions workflow in:
 
----
+.github/workflows/k8s-ci-cd.yaml
 
-## DevOps Tools and Technologies
+automates:
 
-| Category               | Tools               |
-| ---------------------- | ------------------- |
-| Cloud Provider         | AWS EC2             |
-| Infrastructure as Code | Terraform           |
-| Containerization       | Docker              |
-| Automation             | EC2 User Data       |
-| Operating System       | Linux (Ubuntu)      |
-| Database               | MongoDB Atlas       |
-| Networking             | AWS Security Groups |
-| Version Control        | Git and GitHub      |
+1. Docker image build from "realcode/Dockerfile"
+2. Push to Docker Hub
+3. Kubernetes deployment update
+
+This pipeline runs on the k8s-upgrade branch, preserving the integrity of the main Terraform project while enabling continuous delivery of the Kubernetes workload.
 
 ---
 
-## High-Level Architecture
+Real Problems Faced and Solved
 
-```
-GitHub Repository
-      ↓
-Terraform Provisioning (IaC)
-      ↓
-AWS EC2 Instance Creation
-      ↓
-Docker Installation
-      ↓
-Docker Image Pull
-      ↓
-Container Auto-Run
-      ↓
-Application Available Globally
-```
+1. Kubernetes API unreachable
+
+Error:
+
+connection to server localhost:8080 refused
+
+Root cause: containerd was not using systemd cgroups, causing kubelet instability.
+Fix: Forced "SystemdCgroup = true" in containerd configuration and restarted the service.
 
 ---
 
-## Repository Structure
+2. Nodes stuck in NotReady
 
-```
-project-root/
-│
-├── terraform/        # Infrastructure as Code files
-│   ├── main.tf
-│   ├── variables.tf
-│   ├── outputs.tf
-│   └── security.tf
-│
-├── docker/           # Docker build configuration
-│   └── Dockerfile
-│
-├── app/              # Full application source code
-│
-├── .env.example      # Environment variable template
-├── .gitignore        # Git ignore rules
-└── README.md         # Project documentation
-```
+Root cause: Calico BGP mesh did not stabilize immediately after cluster bootstrap.
+Fix: Re-applied Calico manifest and allowed time for BGP peering to establish.
 
 ---
 
-## Automated Deployment Workflow
+3. Application not accessible externally
 
-### Step 1 — Build Docker Image
+Root cause: AWS Security Group did not allow NodePort traffic.
+Fix: Explicitly opened:
 
-```bash
-docker build -t realcode:02 .
-```
-
-### Step 2 — Push Image to Docker Hub
-
-```bash
-docker tag realcode:latest sjmandal/realcode:02
-docker push sjmandal/realcode:02
-```
-
-### Step 3 — Provision Infrastructure Using Terraform
-
-```bash
-cd terraform
-terraform init
-terraform apply
-```
-
-### Step 4 — Access the Application
-
-```
-http://EC2_PUBLIC_IP:3000
-```
+30000–32767 TCP
 
 ---
 
-## EC2 User Data Automation Script
+4. Grafana showing “0 data”
 
-The following script ensures Docker installation, image pulling, and automatic container startup on every EC2 launch:
+Root cause: Grafana could not resolve Prometheus service DNS inside the cluster.
+Fix: Verified CoreDNS health and used the correct internal service endpoint:
 
-```bash
-#!/bin/bash
-set -e
-
-apt update -y
-apt install docker.io -y
-systemctl start docker
-systemctl enable docker
-
-docker pull sjmandal/realcode:02
-
-docker rm -f realcode || true
-
-docker run -d -p 80:3000 -e NODE_ENV=production -e MONGO_URL="mongodb+srv://sjmandal2415_db_user:sjmandal2415_db_user@cluster0.iq6pvqp.mongodb.net/?appName=Cluster0" --name realcode sjmandal/realcode:02
-```
+http://prometheus-kube-prometheus-prometheus.monitoring.svc.cluster.local:9090
 
 ---
 
-## Major Challenges Encountered and Solutions
+5. Prometheus UI inaccessible
 
-### Issue: Application Not Accessible Publicly
-
-**Cause:** Server bound to localhost only
-
-**Resolution:**
-
-```
-hostname = "0.0.0.0"
-```
+Fix: Used Kubernetes port-forwarding rather than direct NodePort access to avoid firewall and routing issues.
 
 ---
 
-### Issue: Real-Time Synchronization Failed Across Devices
+Cleanup
 
-**Cause:** Client socket was configured to connect to localhost
+To remove all resources:
 
-**Resolution:**
-
-```
-io(window.location.origin)
-```
+terraform destroy -auto-approve
 
 ---
 
-### Issue: MongoDB Atlas Connection Failures
-
-| Root Cause                        | Resolution                  |
-| --------------------------------- | --------------------------- |
-| Environment variables not loading | Proper dotenv configuration |
-| Authentication failures           | Credential reset            |
-| IP restrictions                   | Whitelisted 0.0.0.0/0       |
-
----
-
-### Issue: Docker Image Not Updating After Code Changes
-
-**Resolution:** Rebuilt and repushed Docker images before deployment
-
----
-
-### Issue: Terraform Rebuild Reset Server Configuration
-
-**Resolution:** Implemented Docker auto-start via EC2 user data
-
----
-
-## Demonstrated DevOps Capabilities
-
-* Infrastructure as Code and automated provisioning
-* Fully reproducible deployments with zero manual configuration
-* Container lifecycle management using Docker
-* Secure cloud networking and firewall configuration
-* Stateless compute with persistent managed database
-* Production-ready automation workflows
-
----
-
-## Resume-Ready Project Summary
-
-Designed and deployed a fully automated cloud infrastructure using Terraform and Docker on AWS EC2. Implemented containerized application deployment with automatic startup, persistent cloud database integration, and globally accessible services using Infrastructure as Code principles.
-
----
-
-## Potential Future Enhancements
-
-* CI/CD pipeline implementation using GitHub Actions
-* HTTPS enablement with custom domain integration
-* Load balancing and auto-scaling using AWS services
-* Monitoring and observability with Prometheus and Grafana
-
----
-
-## Author
-
-SJ Mandal
